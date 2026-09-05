@@ -1,1 +1,3 @@
 theme: jekyll-theme-minimal
+title: AgriSense
+description: Aplikasi deteksi penyakit pada daun tanaman menggunakan teknologi computer vision untuk membantu petani mengidentifikasi penyakit secara cepat dan akurat.
