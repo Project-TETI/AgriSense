@@ -82,7 +82,7 @@ Sistem mengintegrasikan kecerdasan buatan, jaringan komputer, dan komputasi awan
 
 **Keunggulan kompetitif:** Plantix menawarkan ekosistem all-in-one dengan database penyakit tanaman yang luas dan komunitas global, tetapi terbatas pada aplikasi mobile dan kurang fleksibel untuk integrasi API. 8
 
-### Kompetitor 2 — Agrio
+### Kompetitor 2 - Agrio
 
 **Jenis:** Direct Competitor  
 **Produk:** Platform pertanian digital dengan identifikasi penyakit tanaman dan fitur monitoring berbasis citra.  
@@ -98,7 +98,7 @@ Sistem mengintegrasikan kecerdasan buatan, jaringan komputer, dan komputasi awan
 
 **Keunggulan kompetitif:** Agrio merupakan platform precision agriculture dengan fitur pemantauan satelit dan peringatan dini penyebaran hama, tetapi memiliki layanan berbayar dan relatif kompleks bagi pengguna awam. 9
 
-### Kompetitor 3 — Tomato Disease Detection
+### Kompetitor 3 - Tomato Disease Detection
 
 **Jenis:** Direct Competitor  
 **Produk:** Mobile Apps  
