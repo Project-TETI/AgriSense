@@ -21,7 +21,7 @@ Universitas Gadjah Mada
 
 ---
 
-# Modul 1 – Pembentukan Kelompok & Perumusan Masalah
+# Modul 1 - Pembentukan Kelompok & Perumusan Masalah
 
 ## 1. Nama Produk
 
@@ -65,7 +65,7 @@ Sistem mengintegrasikan kecerdasan buatan, jaringan komputer, dan komputasi awan
 
 ## 5. Analisis Kompetitor
 
-### Kompetitor 1 — Plantix
+### Kompetitor 1 - Plantix
 
 **Jenis:** Direct Competitor  
 **Produk:** Aplikasi identifikasi penyakit tanaman berbasis foto dan informasi pertanian.  
