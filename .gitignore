@@ -1,1 +1,4 @@
 Env
+ml/dataset/
+lightning_logs/
+*.ckpt

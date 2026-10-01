@@ -14,7 +14,7 @@ class FreezeBackbone(BaseFinetuning):
     
     def finetune_function(self, pl_module: pl.LightningModule, current_epoch: int, optimizer: torch.optim.Optimizer):
         if current_epoch == self.unfreeze_at_epoch:
-            self.unfreeze(pl_module.backbone)
+            self.make_trainable(pl_module.backbone)
             
             for m in pl_module.backbone.modules():
                 if isinstance(m, (nn.BatchNorm2d, nn.SyncBatchNorm)):

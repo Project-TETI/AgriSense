@@ -48,9 +48,9 @@ class LeafClassifier(pl.LightningModule):
         loss = self.criterion(logits, y)
         self.train_acc(logits, y)
         self.train_f1(logits, y)
-        self.log("train_loss", loss, on_epoch=True, prog_bar=True)
-        self.log("train_acc", self.train_acc, on_epoch=True, prog_bar=True)
-        self.log("train_f1", self.train_f1, on_epoch=True, prog_bar=True)
+        self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("train_acc", self.train_acc, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("train_f1", self.train_f1, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
