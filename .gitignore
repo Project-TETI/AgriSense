@@ -1,4 +1,5 @@
 Env
 ml/dataset/
 lightning_logs/
-*.ckpt
+*.ckpt__pycache__/
+*.pyc
