@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"os"
-	"time"
 
 	"github.com/Project-TETI/AgriSense/backend/internal/config"
 	"github.com/Project-TETI/AgriSense/backend/internal/handler"
@@ -18,6 +17,11 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using environment variables")
 	}
+	authConfig, err := config.LoadAuthConfig()
+	if err != nil {
+		log.Fatalf("Failed to load auth config: %v", err)
+	}
+
 	db := config.InitDB()
 
 	plantRepo := repository.NewPlantRepository(db)
@@ -28,24 +32,9 @@ func main() {
 	diseaseService := service.NewDiseaseService(diseaseRepo)
 	diseaseHandler := handler.NewDiseaseHandler(diseaseService)
 
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		jwtSecret = "defaultsecretkeyagrisense2026gokils"
-	}
-
-	accessDuration, err := time.ParseDuration(os.Getenv("JWT_ACCESS_EXPIRATION"))
-	if err != nil {
-		accessDuration = 1 * time.Hour
-	}
-
-	refreshDuration, err := time.ParseDuration(os.Getenv("JWT_REFRESH_EXPIRATION"))
-	if err != nil {
-		refreshDuration = 168 * time.Hour
-	}
-
 	userRepo := repository.NewUserRepository(db)
 	refreshTokenRepo := repository.NewRefreshTokenRepository(db)
-	authService := service.NewAuthService(userRepo, refreshTokenRepo, jwtSecret, accessDuration, refreshDuration)
+	authService := service.NewAuthService(userRepo, refreshTokenRepo, authConfig.JWTSecret, authConfig.AccessDuration, authConfig.RefreshDuration)
 	authHandler := handler.NewAuthHandler(authService)
 
 	healthHandler := handler.NewHealthHandler(db)
@@ -62,7 +51,7 @@ func main() {
 			authGroup.POST("/refresh", authHandler.RefreshToken)
 
 			protectedAuth := authGroup.Group("")
-			protectedAuth.Use(middleware.AuthMiddleware(jwtSecret))
+			protectedAuth.Use(middleware.AuthMiddleware(authConfig.JWTSecret))
 			{
 				protectedAuth.POST("/logout", authHandler.Logout)
 				protectedAuth.GET("/me", authHandler.GetMe)
