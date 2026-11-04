@@ -8,12 +8,14 @@ import (
 	"github.com/Project-TETI/AgriSense/backend/internal/domain"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type RefreshTokenRepository interface {
 	Create(ctx context.Context, token *domain.RefreshToken) error
 	FindByTokenHash(ctx context.Context, tokenHash string) (*domain.RefreshToken, error)
-	Revoke(ctx context.Context, id uuid.UUID) error
+	FindByTokenHashForUpdate(ctx context.Context, tokenHash string) (*domain.RefreshToken, error)
+	Revoke(ctx context.Context, id uuid.UUID) (bool, error)
 	RevokeAllByUserID(ctx context.Context, userID uuid.UUID) error
 }
 
@@ -26,7 +28,7 @@ func NewRefreshTokenRepository(db *gorm.DB) RefreshTokenRepository {
 }
 
 func (r *refreshTokenRepository) Create(ctx context.Context, token *domain.RefreshToken) error {
-	return r.db.WithContext(ctx).Create(token).Error
+	return authDBError(r.db.WithContext(ctx).Create(token).Error)
 }
 
 func (r *refreshTokenRepository) FindByTokenHash(ctx context.Context, tokenHash string) (*domain.RefreshToken, error) {
@@ -36,21 +38,35 @@ func (r *refreshTokenRepository) FindByTokenHash(ctx context.Context, tokenHash 
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, authDBError(err)
 	}
 	return &token, nil
 }
 
-func (r *refreshTokenRepository) Revoke(ctx context.Context, id uuid.UUID) error {
-	now := time.Now()
-	return r.db.WithContext(ctx).Model(&domain.RefreshToken{}).
-		Where("id = ?", id).
-		Update("revoked_at", &now).Error
+// FindByTokenHashForUpdate must be called on a repository bound to a transaction.
+func (r *refreshTokenRepository) FindByTokenHashForUpdate(ctx context.Context, tokenHash string) (*domain.RefreshToken, error) {
+	var token domain.RefreshToken
+	err := r.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("token_hash = ?", tokenHash).First(&token).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, authDBError(err)
+	}
+	return &token, nil
+}
+
+func (r *refreshTokenRepository) Revoke(ctx context.Context, id uuid.UUID) (bool, error) {
+	now := time.Now().UTC()
+	result := r.db.WithContext(ctx).Model(&domain.RefreshToken{}).
+		Where("id = ? AND revoked_at IS NULL", id).Update("revoked_at", now)
+	return result.RowsAffected == 1, authDBError(result.Error)
 }
 
 func (r *refreshTokenRepository) RevokeAllByUserID(ctx context.Context, userID uuid.UUID) error {
 	now := time.Now()
-	return r.db.WithContext(ctx).Model(&domain.RefreshToken{}).
+	return authDBError(r.db.WithContext(ctx).Model(&domain.RefreshToken{}).
 		Where("user_id = ? AND revoked_at IS NULL", userID).
-		Update("revoked_at", &now).Error
+		Update("revoked_at", &now).Error)
 }

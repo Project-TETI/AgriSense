@@ -2,7 +2,8 @@ package service
 
 import (
 	"context"
-	"errors"
+	"encoding/hex"
+	"fmt"
 	"time"
 
 	"github.com/Project-TETI/AgriSense/backend/internal/domain"
@@ -12,16 +13,17 @@ import (
 )
 
 type AuthService interface {
-	Register(ctx context.Context, req domain.RegisterRequest) (*domain.AuthResponse, string, error)
-	Login(ctx context.Context, req domain.LoginRequest) (*domain.AuthResponse, string, error)
-	RefreshToken(ctx context.Context, rawRefreshToken string) (*domain.AuthResponse, string, error)
-	Logout(ctx context.Context, rawRefreshToken string) error
-	GetProfile(ctx context.Context, userID uuid.UUID) (*domain.UserResponse, error)
+	Register(context.Context, domain.RegisterRequest) (*domain.AuthSession, error)
+	Login(context.Context, domain.LoginRequest) (*domain.AuthSession, error)
+	RefreshToken(context.Context, string) (*domain.AuthSession, error)
+	Logout(context.Context, string) error
+	GetProfile(context.Context, uuid.UUID) (*domain.UserResponse, error)
 }
 
 type authService struct {
 	userRepo         repository.UserRepository
 	refreshTokenRepo repository.RefreshTokenRepository
+	transaction      repository.AuthTransaction
 	jwtSecret        string
 	accessDuration   time.Duration
 	refreshDuration  time.Duration
@@ -30,155 +32,160 @@ type authService struct {
 func NewAuthService(
 	userRepo repository.UserRepository,
 	refreshTokenRepo repository.RefreshTokenRepository,
+	transaction repository.AuthTransaction,
 	jwtSecret string,
 	accessDuration time.Duration,
 	refreshDuration time.Duration,
 ) AuthService {
 	return &authService{
-		userRepo:         userRepo,
-		refreshTokenRepo: refreshTokenRepo,
-		jwtSecret:        jwtSecret,
-		accessDuration:   accessDuration,
-		refreshDuration:  refreshDuration,
+		userRepo: userRepo, refreshTokenRepo: refreshTokenRepo, transaction: transaction,
+		jwtSecret: jwtSecret, accessDuration: accessDuration, refreshDuration: refreshDuration,
 	}
 }
 
-func (s *authService) Register(ctx context.Context, req domain.RegisterRequest) (*domain.AuthResponse, string, error) {
+func (s *authService) Register(ctx context.Context, req domain.RegisterRequest) (*domain.AuthSession, error) {
+	if len(req.Password) > 72 {
+		return nil, domain.ErrInvalidInput
+	}
 	existingUser, err := s.userRepo.FindByEmail(ctx, req.Email)
 	if err != nil {
-		return nil, "", err
+		return nil, fmt.Errorf("find registration email: %w", err)
 	}
 	if existingUser != nil {
-		return nil, "", errors.New("email sudah terdaftar")
+		return nil, domain.ErrEmailAlreadyRegistered
 	}
-
+	// Hashing is deliberately outside the transaction to avoid holding locks during bcrypt.
 	passwordHash, err := utils.HashPassword(req.Password)
 	if err != nil {
-		return nil, "", err
+		return nil, fmt.Errorf("hash registration password: %w", err)
 	}
-
-	user := domain.User{
-		Name:         req.Name,
-		Email:        req.Email,
-		PasswordHash: passwordHash,
+	user := domain.User{Name: req.Name, Email: req.Email, PasswordHash: passwordHash}
+	var session *domain.AuthSession
+	err = s.transaction.Run(ctx, func(users repository.UserRepository, tokens repository.RefreshTokenRepository) error {
+		if err := users.Create(ctx, &user); err != nil {
+			return err
+		}
+		var err error
+		session, err = s.generateAuthSession(ctx, tokens, &user, time.Now().UTC().Add(s.refreshDuration))
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("register session: %w", err)
 	}
-
-	if err := s.userRepo.Create(ctx, &user); err != nil {
-		return nil, "", err
-	}
-
-	return s.generateAuthSession(ctx, &user)
+	return session, nil
 }
 
-func (s *authService) Login(ctx context.Context, req domain.LoginRequest) (*domain.AuthResponse, string, error) {
+func (s *authService) Login(ctx context.Context, req domain.LoginRequest) (*domain.AuthSession, error) {
 	user, err := s.userRepo.FindByEmail(ctx, req.Email)
 	if err != nil {
-		return nil, "", err
+		return nil, fmt.Errorf("find login user: %w", err)
 	}
-	if user == nil {
-		return nil, "", errors.New("email atau kata sandi tidak valid")
+	if user == nil || !utils.CheckPasswordHash(req.Password, user.PasswordHash) {
+		return nil, domain.ErrInvalidCredentials
 	}
-
-	if !utils.CheckPasswordHash(req.Password, user.PasswordHash) {
-		return nil, "", errors.New("email atau kata sandi tidak valid")
-	}
-
-	return s.generateAuthSession(ctx, user)
+	return s.generateAuthSession(ctx, s.refreshTokenRepo, user, time.Now().UTC().Add(s.refreshDuration))
 }
 
-func (s *authService) RefreshToken(ctx context.Context, rawRefreshToken string) (*domain.AuthResponse, string, error) {
-	if rawRefreshToken == "" {
-		return nil, "", errors.New("refresh token tidak ditemukan")
+func validRefreshToken(raw string) bool {
+	if len(raw) != 64 {
+		return false
 	}
+	_, err := hex.DecodeString(raw)
+	return err == nil
+}
 
-	tokenHash := utils.HashToken(rawRefreshToken)
-	storedToken, err := s.refreshTokenRepo.FindByTokenHash(ctx, tokenHash)
+func (s *authService) RefreshToken(ctx context.Context, rawRefreshToken string) (*domain.AuthSession, error) {
+	if !validRefreshToken(rawRefreshToken) {
+		return nil, domain.ErrInvalidRefreshToken
+	}
+	var session *domain.AuthSession
+	err := s.transaction.Run(ctx, func(users repository.UserRepository, tokens repository.RefreshTokenRepository) error {
+		storedToken, err := tokens.FindByTokenHashForUpdate(ctx, utils.HashToken(rawRefreshToken))
+		if err != nil {
+			return err
+		}
+		// Check time after acquiring the row lock, not before waiting for it.
+		if storedToken == nil || storedToken.RevokedAt != nil || !storedToken.ExpiresAt.After(time.Now().UTC()) {
+			return domain.ErrInvalidRefreshToken
+		}
+		user, err := users.FindByID(ctx, storedToken.UserID)
+		if err != nil {
+			return err
+		}
+		if user == nil {
+			return domain.ErrInvalidRefreshToken
+		}
+		revoked, err := tokens.Revoke(ctx, storedToken.ID)
+		if err != nil {
+			return err
+		}
+		if !revoked {
+			return domain.ErrInvalidRefreshToken
+		}
+		session, err = s.generateAuthSession(ctx, tokens, user, storedToken.ExpiresAt)
+		return err
+	})
 	if err != nil {
-		return nil, "", err
+		return nil, fmt.Errorf("rotate refresh token: %w", err)
 	}
-	if storedToken == nil {
-		return nil, "", errors.New("refresh token tidak valid")
-	}
-
-	if storedToken.RevokedAt != nil {
-		return nil, "", errors.New("refresh token sudah dicabut")
-	}
-	if time.Now().After(storedToken.ExpiresAt) {
-		return nil, "", errors.New("refresh token telah kedaluwarsa")
-	}
-
-	if err := s.refreshTokenRepo.Revoke(ctx, storedToken.ID); err != nil {
-		return nil, "", err
-	}
-
-	return s.generateAuthSession(ctx, &storedToken.User)
+	return session, nil
 }
 
 func (s *authService) Logout(ctx context.Context, rawRefreshToken string) error {
-	if rawRefreshToken == "" {
+	if !validRefreshToken(rawRefreshToken) {
 		return nil
 	}
-
-	tokenHash := utils.HashToken(rawRefreshToken)
-	storedToken, err := s.refreshTokenRepo.FindByTokenHash(ctx, tokenHash)
+	storedToken, err := s.refreshTokenRepo.FindByTokenHash(ctx, utils.HashToken(rawRefreshToken))
 	if err != nil {
-		return err
+		return fmt.Errorf("find logout token: %w", err)
 	}
-	if storedToken != nil && storedToken.RevokedAt == nil {
-		return s.refreshTokenRepo.Revoke(ctx, storedToken.ID)
+	if storedToken == nil || storedToken.RevokedAt != nil {
+		return nil
 	}
-
+	_, err = s.refreshTokenRepo.Revoke(ctx, storedToken.ID)
+	if err != nil {
+		return fmt.Errorf("revoke logout token: %w", err)
+	}
 	return nil
 }
 
 func (s *authService) GetProfile(ctx context.Context, userID uuid.UUID) (*domain.UserResponse, error) {
 	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find profile: %w", err)
 	}
 	if user == nil {
-		return nil, errors.New("pengguna tidak ditemukan")
+		return nil, domain.ErrUserNotFound
 	}
-
-	return &domain.UserResponse{
-		ID:        user.ID,
-		Name:      user.Name,
-		Email:     user.Email,
-		CreatedAt: user.CreatedAt,
-	}, nil
+	return &domain.UserResponse{ID: user.ID, Name: user.Name, Email: user.Email, CreatedAt: user.CreatedAt}, nil
 }
 
-func (s *authService) generateAuthSession(ctx context.Context, user *domain.User) (*domain.AuthResponse, string, error) {
-	accessToken, err := utils.GenerateAccessToken(user.ID, user.Email, user.Name, s.jwtSecret, s.accessDuration)
-	if err != nil {
-		return nil, "", err
+func (s *authService) generateAuthSession(ctx context.Context, tokens repository.RefreshTokenRepository, user *domain.User, refreshExpiresAt time.Time) (*domain.AuthSession, error) {
+	now := time.Now().UTC().Truncate(time.Second)
+	accessExpiresAt := now.Add(s.accessDuration).Truncate(time.Second)
+	if refreshExpiresAt.Before(accessExpiresAt) {
+		accessExpiresAt = refreshExpiresAt.Truncate(time.Second)
 	}
-
+	if !accessExpiresAt.After(now) {
+		return nil, domain.ErrInvalidRefreshToken
+	}
+	accessToken, err := utils.GenerateAccessTokenWithExpiry(user.ID, user.Email, user.Name, s.jwtSecret, now, accessExpiresAt)
+	if err != nil {
+		return nil, fmt.Errorf("generate access token: %w", err)
+	}
 	rawRefreshToken, tokenHash, err := utils.GenerateRefreshToken()
 	if err != nil {
-		return nil, "", err
+		return nil, fmt.Errorf("generate refresh token: %w", err)
 	}
-
-	refreshTokenModel := domain.RefreshToken{
-		UserID:    user.ID,
-		TokenHash: tokenHash,
-		ExpiresAt: time.Now().Add(s.refreshDuration),
+	refreshToken := domain.RefreshToken{UserID: user.ID, TokenHash: tokenHash, ExpiresAt: refreshExpiresAt}
+	if err := tokens.Create(ctx, &refreshToken); err != nil {
+		return nil, fmt.Errorf("save refresh token: %w", err)
 	}
-	if err := s.refreshTokenRepo.Create(ctx, &refreshTokenModel); err != nil {
-		return nil, "", err
-	}
-
-	response := &domain.AuthResponse{
-		AccessToken: accessToken,
-		TokenType:   "Bearer",
-		ExpiresIn:   int64(s.accessDuration.Seconds()),
-		User: domain.UserResponse{
-			ID:        user.ID,
-			Name:      user.Name,
-			Email:     user.Email,
-			CreatedAt: user.CreatedAt,
+	return &domain.AuthSession{
+		Response: domain.AuthResponse{
+			AccessToken: accessToken, TokenType: "Bearer", ExpiresIn: int64(accessExpiresAt.Sub(now).Seconds()),
+			User: domain.UserResponse{ID: user.ID, Name: user.Name, Email: user.Email, CreatedAt: user.CreatedAt},
 		},
-	}
-
-	return response, rawRefreshToken, nil
+		RefreshToken: rawRefreshToken, RefreshExpiresAt: refreshExpiresAt,
+	}, nil
 }

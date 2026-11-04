@@ -22,7 +22,10 @@ func main() {
 		log.Fatalf("Failed to load auth config: %v", err)
 	}
 
-	db := config.InitDB()
+	db, err := config.InitDB()
+	if err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
 
 	plantRepo := repository.NewPlantRepository(db)
 	plantService := service.NewPlantService(plantRepo)
@@ -34,7 +37,8 @@ func main() {
 
 	userRepo := repository.NewUserRepository(db)
 	refreshTokenRepo := repository.NewRefreshTokenRepository(db)
-	authService := service.NewAuthService(userRepo, refreshTokenRepo, authConfig.JWTSecret, authConfig.AccessDuration, authConfig.RefreshDuration)
+	authTransaction := repository.NewAuthTransaction(db)
+	authService := service.NewAuthService(userRepo, refreshTokenRepo, authTransaction, authConfig.JWTSecret, authConfig.AccessDuration, authConfig.RefreshDuration)
 	authHandler := handler.NewAuthHandler(authService)
 
 	healthHandler := handler.NewHealthHandler(db)

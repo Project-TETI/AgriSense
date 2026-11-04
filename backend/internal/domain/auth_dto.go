@@ -30,3 +30,10 @@ type AuthResponse struct {
 	ExpiresIn   int64        `json:"expires_in"`
 	User        UserResponse `json:"user"`
 }
+
+// AuthSession is an internal result; handlers serialize only Response.
+type AuthSession struct {
+	Response         AuthResponse
+	RefreshToken     string    `json:"-"`
+	RefreshExpiresAt time.Time `json:"-"`
+}

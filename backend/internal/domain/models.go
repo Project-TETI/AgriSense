@@ -28,7 +28,7 @@ func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
 type RefreshToken struct {
 	ID        uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
 	UserID    uuid.UUID  `gorm:"type:uuid;not null;index" json:"user_id"`
-	TokenHash string     `gorm:"type:text;not null" json:"token_hash"`
+	TokenHash string     `gorm:"type:text;not null;uniqueIndex" json:"-"`
 	ExpiresAt time.Time  `gorm:"not null" json:"expires_at"`
 	CreatedAt time.Time  `gorm:"not null" json:"created_at"`
 	RevokedAt *time.Time `gorm:"type:timestamp" json:"revoked_at,omitempty"`
