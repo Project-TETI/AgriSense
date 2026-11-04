@@ -8,6 +8,7 @@ import (
 	"github.com/Project-TETI/AgriSense/backend/internal/domain"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 func InitDB() (*gorm.DB, error) {
@@ -21,7 +22,8 @@ func InitDB() (*gorm.DB, error) {
 		os.Getenv("DB_SSLMODE"),
 	)
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	// Driver errors and rendered SQL can contain password/token hashes.
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
 		return nil, fmt.Errorf("connect database: %w", err)
 	}

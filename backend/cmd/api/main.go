@@ -2,7 +2,9 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
+	"time"
 
 	"github.com/Project-TETI/AgriSense/backend/internal/config"
 	"github.com/Project-TETI/AgriSense/backend/internal/handler"
@@ -20,6 +22,10 @@ func main() {
 	authConfig, err := config.LoadAuthConfig()
 	if err != nil {
 		log.Fatalf("Failed to load auth config: %v", err)
+	}
+	authHTTPConfig, err := config.LoadAuthHTTPConfig()
+	if err != nil {
+		log.Fatalf("Failed to load auth HTTP config: %v", err)
 	}
 
 	db, err := config.InitDB()
@@ -39,28 +45,20 @@ func main() {
 	refreshTokenRepo := repository.NewRefreshTokenRepository(db)
 	authTransaction := repository.NewAuthTransaction(db)
 	authService := service.NewAuthService(userRepo, refreshTokenRepo, authTransaction, authConfig.JWTSecret, authConfig.AccessDuration, authConfig.RefreshDuration)
-	authHandler := handler.NewAuthHandler(authService)
+	authHandler := handler.NewAuthHandler(authService, authHTTPConfig)
 
 	healthHandler := handler.NewHealthHandler(db)
 
 	r := gin.Default()
+	if err := r.SetTrustedProxies(authHTTPConfig.TrustedProxies); err != nil {
+		log.Fatalf("Failed to configure trusted proxies: %v", err)
+	}
+	r.Use(middleware.BrowserSecurity(authHTTPConfig.AllowedOrigins))
 	apiV1 := r.Group("/api/v1")
 	{
 		apiV1.GET("/health", healthHandler.CheckHealth)
 
-		authGroup := apiV1.Group("/auth")
-		{
-			authGroup.POST("/register", authHandler.Register)
-			authGroup.POST("/login", authHandler.Login)
-			authGroup.POST("/refresh", authHandler.RefreshToken)
-
-			protectedAuth := authGroup.Group("")
-			protectedAuth.Use(middleware.AuthMiddleware(authConfig.JWTSecret))
-			{
-				protectedAuth.POST("/logout", authHandler.Logout)
-				protectedAuth.GET("/me", authHandler.GetMe)
-			}
-		}
+		authHandler.RegisterRoutes(apiV1.Group("/auth"), authConfig.JWTSecret)
 
 		apiV1.GET("/plants", plantHandler.GetPlants)
 		apiV1.GET("/diseases", diseaseHandler.GetDiseases)
@@ -73,7 +71,12 @@ func main() {
 	}
 
 	log.Printf("Starting Server on port %s", port)
-	if err := r.Run(":" + port); err != nil {
+	server := &http.Server{
+		Addr: ":" + port, Handler: r,
+		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second,
+		WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second,
+	}
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }

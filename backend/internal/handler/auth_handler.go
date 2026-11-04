@@ -5,9 +5,9 @@ import (
 	"log"
 	"math"
 	"net/http"
-	"os"
 	"time"
 
+	"github.com/Project-TETI/AgriSense/backend/internal/config"
 	"github.com/Project-TETI/AgriSense/backend/internal/domain"
 	"github.com/Project-TETI/AgriSense/backend/internal/middleware"
 	"github.com/Project-TETI/AgriSense/backend/internal/service"
@@ -21,10 +21,21 @@ const (
 
 type AuthHandler struct {
 	authService service.AuthService
+	httpConfig  config.AuthHTTPConfig
 }
 
-func NewAuthHandler(authService service.AuthService) *AuthHandler {
-	return &AuthHandler{authService: authService}
+func NewAuthHandler(authService service.AuthService, httpConfig config.AuthHTTPConfig) *AuthHandler {
+	return &AuthHandler{authService: authService, httpConfig: httpConfig}
+}
+
+// RegisterRoutes is shared by the server and HTTP integration tests.
+func (h *AuthHandler) RegisterRoutes(group *gin.RouterGroup, jwtSecret string) {
+	posts := group.Group("")
+	posts.POST("/register", middleware.AuthRateLimit(5, time.Minute), middleware.AuthBodyLimit(), h.Register)
+	posts.POST("/login", middleware.AuthRateLimit(10, time.Minute), middleware.AuthBodyLimit(), h.Login)
+	posts.POST("/refresh", middleware.AuthRateLimit(60, time.Minute), middleware.AuthBodyLimit(), h.RefreshToken)
+	posts.POST("/logout", middleware.AuthRateLimit(60, time.Minute), middleware.AuthBodyLimit(), h.Logout)
+	group.GET("/me", middleware.AuthMiddleware(jwtSecret), h.GetMe)
 }
 
 func writeAuthError(c *gin.Context, err error) {
@@ -111,7 +122,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		return
 	}
 	h.clearRefreshTokenCookie(c)
-	c.JSON(http.StatusOK, gin.H{"message": "berhasil logout"})
+	c.Status(http.StatusNoContent)
 }
 
 func (h *AuthHandler) GetMe(c *gin.Context) {
@@ -137,7 +148,7 @@ func (h *AuthHandler) setRefreshTokenCookie(c *gin.Context, token string, expire
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name: RefreshTokenCookieName, Value: token, Path: CookieAuthPath,
 		Expires: expiresAt.UTC(), MaxAge: maxAge, HttpOnly: true,
-		Secure: os.Getenv("GIN_MODE") == "release",
+		Secure: h.httpConfig.CookieSecure, SameSite: h.httpConfig.CookieSameSite,
 	})
 }
 
@@ -145,6 +156,6 @@ func (h *AuthHandler) clearRefreshTokenCookie(c *gin.Context) {
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name: RefreshTokenCookieName, Path: CookieAuthPath, MaxAge: -1,
 		Expires: time.Unix(1, 0).UTC(), HttpOnly: true,
-		Secure: os.Getenv("GIN_MODE") == "release",
+		Secure: h.httpConfig.CookieSecure, SameSite: h.httpConfig.CookieSameSite,
 	})
 }

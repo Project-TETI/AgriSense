@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Project-TETI/AgriSense/backend/internal/config"
 	"github.com/Project-TETI/AgriSense/backend/internal/domain"
 	"github.com/Project-TETI/AgriSense/backend/internal/middleware"
 	"github.com/gin-gonic/gin"
@@ -70,7 +71,7 @@ func TestAuthHandlerErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.operation+"/"+tt.code, func(t *testing.T) {
 			stub := &authServiceStub{err: fmt.Errorf("service: %w", tt.err)}
-			h := NewAuthHandler(stub)
+			h := NewAuthHandler(stub, config.AuthHTTPConfig{CookieSecure: true, CookieSameSite: http.SameSiteLaxMode})
 			r := gin.New()
 			r.POST("/register", h.Register)
 			r.POST("/login", h.Login)
@@ -107,7 +108,6 @@ func TestAuthHandlerErrors(t *testing.T) {
 
 func TestAuthSuccessKeepsRefreshOutOfJSONAndUsesActualExpiry(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	t.Setenv("GIN_MODE", "release")
 	expiry := time.Now().UTC().Add(2 * time.Hour).Truncate(time.Second)
 	session := &domain.AuthSession{
 		Response:     domain.AuthResponse{AccessToken: "access-token", TokenType: "Bearer", ExpiresIn: 900},
@@ -115,7 +115,7 @@ func TestAuthSuccessKeepsRefreshOutOfJSONAndUsesActualExpiry(t *testing.T) {
 	}
 	for _, operation := range []string{"register", "login", "refresh"} {
 		t.Run(operation, func(t *testing.T) {
-			h := NewAuthHandler(&authServiceStub{session: session})
+			h := NewAuthHandler(&authServiceStub{session: session}, config.AuthHTTPConfig{CookieSecure: true, CookieSameSite: http.SameSiteLaxMode})
 			r := gin.New()
 			r.POST("/register", h.Register)
 			r.POST("/login", h.Login)
@@ -135,7 +135,8 @@ func TestAuthSuccessKeepsRefreshOutOfJSONAndUsesActualExpiry(t *testing.T) {
 			}
 			cookie := cookies[0]
 			if cookie.Value != session.RefreshToken || !cookie.Expires.Equal(expiry) ||
-				cookie.MaxAge <= 0 || cookie.MaxAge > 7200 || !cookie.HttpOnly || !cookie.Secure || cookie.Path != CookieAuthPath {
+				cookie.MaxAge <= 0 || cookie.MaxAge > 7200 || !cookie.HttpOnly || !cookie.Secure || cookie.Path != CookieAuthPath ||
+				cookie.Domain != "" || cookie.SameSite != http.SameSiteLaxMode {
 				t.Fatal("unexpected refresh cookie attributes")
 			}
 			if strings.Contains(w.Body.String(), session.RefreshToken) || !strings.Contains(w.Body.String(), `"access_token":"access-token"`) {
@@ -152,7 +153,7 @@ func TestAuthSuccessKeepsRefreshOutOfJSONAndUsesActualExpiry(t *testing.T) {
 func TestAuthInputAndMiddlewareFailures(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	stub := &authServiceStub{}
-	h := NewAuthHandler(stub)
+	h := NewAuthHandler(stub, config.AuthHTTPConfig{CookieSameSite: http.SameSiteLaxMode})
 	r := gin.New()
 	r.POST("/register", h.Register)
 	r.POST("/refresh", h.RefreshToken)

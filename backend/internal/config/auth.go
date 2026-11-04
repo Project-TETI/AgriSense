@@ -60,8 +60,8 @@ func readDurationEnv(
 	}
 
 	duration, err := time.ParseDuration(raw)
-	if err != nil || duration <= 0 {
-		return 0, fmt.Errorf("%s must be a valid positive duration string, e.g., '15m', '1h', '24h'. Got: '%s'", key, raw)
+	if err != nil || duration < time.Second {
+		return 0, fmt.Errorf("%s must be a valid duration of at least 1s, e.g., '15m', '1h', '24h'. Got: '%s'", key, raw)
 	}
 
 	return duration, nil

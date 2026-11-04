@@ -65,6 +65,12 @@ func TestLoadAuthConfig(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "subsecond access",
+			secret:  validSecret,
+			access:  "500ms",
+			wantErr: true,
+		},
+		{
 			name:    "negative refresh",
 			secret:  validSecret,
 			refresh: "-1h",

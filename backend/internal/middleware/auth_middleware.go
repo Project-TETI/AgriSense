@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Project-TETI/AgriSense/backend/internal/domain"
 	"github.com/Project-TETI/AgriSense/backend/internal/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -20,8 +19,8 @@ func AuthMiddleware(jwtSecret string) gin.HandlerFunc {
 			return
 		}
 
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
+		parts := strings.Fields(authHeader)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
 			abortInvalidAccessToken(c)
 			return
 		}
@@ -44,7 +43,7 @@ func AuthMiddleware(jwtSecret string) gin.HandlerFunc {
 func abortInvalidAccessToken(c *gin.Context) {
 	c.Header("WWW-Authenticate", "Bearer")
 	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-		"error": gin.H{"code": "INVALID_ACCESS_TOKEN", "message": domain.ErrInvalidAccessToken.Error()},
+		"error": gin.H{"code": "INVALID_ACCESS_TOKEN", "message": "Token akses tidak valid atau kedaluwarsa"},
 	})
 }
 
