@@ -3,3 +3,6 @@ ml/dataset/
 lightning_logs/
 *.ckpt__pycache__/
 *.pyc
+.env
+.env.*
+!.env.example

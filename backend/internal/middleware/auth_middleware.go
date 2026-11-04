@@ -12,25 +12,23 @@ import (
 
 func AuthMiddleware(jwtSecret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "header otorisasi diperlukan"})
-			c.Abort()
+			abortInvalidAccessToken(c)
 			return
 		}
 
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "format token tidak valid, gunakan: Bearer <token>"})
-			c.Abort()
+		parts := strings.Fields(authHeader)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+			abortInvalidAccessToken(c)
 			return
 		}
 
 		tokenString := parts[1]
 		claims, err := utils.ValidateAccessToken(tokenString, jwtSecret)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "token tidak valid atau sudah kedaluwarsa"})
-			c.Abort()
+			abortInvalidAccessToken(c)
 			return
 		}
 
@@ -40,6 +38,13 @@ func AuthMiddleware(jwtSecret string) gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+func abortInvalidAccessToken(c *gin.Context) {
+	c.Header("WWW-Authenticate", "Bearer")
+	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+		"error": gin.H{"code": "INVALID_ACCESS_TOKEN", "message": "Token akses tidak valid atau kedaluwarsa"},
+	})
 }
 
 func GetCurrentUserID(c *gin.Context) (uuid.UUID, error) {

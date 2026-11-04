@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -18,7 +19,19 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using environment variables")
 	}
-	db := config.InitDB()
+	authConfig, err := config.LoadAuthConfig()
+	if err != nil {
+		log.Fatalf("Failed to load auth config: %v", err)
+	}
+	authHTTPConfig, err := config.LoadAuthHTTPConfig()
+	if err != nil {
+		log.Fatalf("Failed to load auth HTTP config: %v", err)
+	}
+
+	db, err := config.InitDB()
+	if err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
 
 	plantRepo := repository.NewPlantRepository(db)
 	plantService := service.NewPlantService(plantRepo)
@@ -28,46 +41,24 @@ func main() {
 	diseaseService := service.NewDiseaseService(diseaseRepo)
 	diseaseHandler := handler.NewDiseaseHandler(diseaseService)
 
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		jwtSecret = "defaultsecretkeyagrisense2026gokils"
-	}
-
-	accessDuration, err := time.ParseDuration(os.Getenv("JWT_ACCESS_EXPIRATION"))
-	if err != nil {
-		accessDuration = 1 * time.Hour
-	}
-
-	refreshDuration, err := time.ParseDuration(os.Getenv("JWT_REFRESH_EXPIRATION"))
-	if err != nil {
-		refreshDuration = 168 * time.Hour
-	}
-
 	userRepo := repository.NewUserRepository(db)
 	refreshTokenRepo := repository.NewRefreshTokenRepository(db)
-	authService := service.NewAuthService(userRepo, refreshTokenRepo, jwtSecret, accessDuration, refreshDuration)
-	authHandler := handler.NewAuthHandler(authService)
+	authTransaction := repository.NewAuthTransaction(db)
+	authService := service.NewAuthService(userRepo, refreshTokenRepo, authTransaction, authConfig.JWTSecret, authConfig.AccessDuration, authConfig.RefreshDuration)
+	authHandler := handler.NewAuthHandler(authService, authHTTPConfig)
 
 	healthHandler := handler.NewHealthHandler(db)
 
 	r := gin.Default()
+	if err := r.SetTrustedProxies(authHTTPConfig.TrustedProxies); err != nil {
+		log.Fatalf("Failed to configure trusted proxies: %v", err)
+	}
+	r.Use(middleware.BrowserSecurity(authHTTPConfig.AllowedOrigins))
 	apiV1 := r.Group("/api/v1")
 	{
 		apiV1.GET("/health", healthHandler.CheckHealth)
 
-		authGroup := apiV1.Group("/auth")
-		{
-			authGroup.POST("/register", authHandler.Register)
-			authGroup.POST("/login", authHandler.Login)
-			authGroup.POST("/refresh", authHandler.RefreshToken)
-
-			protectedAuth := authGroup.Group("")
-			protectedAuth.Use(middleware.AuthMiddleware(jwtSecret))
-			{
-				protectedAuth.POST("/logout", authHandler.Logout)
-				protectedAuth.GET("/me", authHandler.GetMe)
-			}
-		}
+		authHandler.RegisterRoutes(apiV1.Group("/auth"), authConfig.JWTSecret)
 
 		apiV1.GET("/plants", plantHandler.GetPlants)
 		apiV1.GET("/diseases", diseaseHandler.GetDiseases)
@@ -80,7 +71,12 @@ func main() {
 	}
 
 	log.Printf("Starting Server on port %s", port)
-	if err := r.Run(":" + port); err != nil {
+	server := &http.Server{
+		Addr: ":" + port, Handler: r,
+		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second,
+		WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second,
+	}
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }

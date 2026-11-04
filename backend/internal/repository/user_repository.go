@@ -6,6 +6,7 @@ import (
 
 	"github.com/Project-TETI/AgriSense/backend/internal/domain"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 )
 
@@ -24,7 +25,13 @@ func NewUserRepository(db *gorm.DB) UserRepository {
 }
 
 func (r *userRepository) Create(ctx context.Context, user *domain.User) error {
-	return r.db.WithContext(ctx).Create(user).Error
+	err := r.db.WithContext(ctx).Create(user).Error
+	var pgError *pgconn.PgError
+	if errors.As(err, &pgError) && pgError.Code == "23505" &&
+		(pgError.ConstraintName == "idx_users_email" || pgError.ConstraintName == "users_email_key") {
+		return domain.ErrEmailAlreadyRegistered
+	}
+	return authDBError(err)
 }
 
 func (r *userRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
@@ -34,7 +41,7 @@ func (r *userRepository) FindByEmail(ctx context.Context, email string) (*domain
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, authDBError(err)
 	}
 	return &user, nil
 }
@@ -46,7 +53,7 @@ func (r *userRepository) FindByID(ctx context.Context, id uuid.UUID) (*domain.Us
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, authDBError(err)
 	}
 	return &user, nil
 }
