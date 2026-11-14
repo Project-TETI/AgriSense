@@ -1,12 +1,17 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
+	"regexp"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/Project-TETI/AgriSense/backend/internal/service"
 )
+
+var catalogIdentifier = regexp.MustCompile(`^[a-z0-9]+(_[a-z0-9]+)*$`)
 
 type DiseaseHandler struct {
 	diseaseService service.DiseaseService
@@ -17,29 +22,51 @@ func NewDiseaseHandler(diseaseService service.DiseaseService) *DiseaseHandler {
 }
 
 func (h *DiseaseHandler) GetDiseases(c *gin.Context) {
-	plantID := c.Query("plant_id")
+	var plantID string
+	if values, present := c.Request.URL.Query()["plant_id"]; present {
+		if len(values) != 1 {
+			catalogError(c, http.StatusBadRequest, "INVALID_INPUT", "Filter tanaman tidak valid")
+			return
+		}
+		id, err := uuid.Parse(values[0])
+		if err != nil || id == uuid.Nil {
+			catalogError(c, http.StatusBadRequest, "INVALID_INPUT", "Filter tanaman tidak valid")
+			return
+		}
+		plantID = id.String()
+	}
 	diseases, err := h.diseaseService.GetAllDiseases(c.Request.Context(), plantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Cannot retrieve diseases: " + err.Error()})
+		catalogError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Terjadi kesalahan internal")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"diseases": diseases,
-	})
+	response := make([]diseaseResponse, 0, len(diseases))
+	for _, disease := range diseases {
+		response = append(response, catalogDisease(disease))
+	}
+	c.JSON(http.StatusOK, gin.H{"diseases": response})
 }
 
-// /api/v1/diseases/:class_name
-func (h *DiseaseHandler) GetDiseaseByClassName(c *gin.Context) {
+func (h *DiseaseHandler) GetDiseaseByPlantAndClass(c *gin.Context) {
+	plantName := c.Param("plant_name")
 	className := c.Param("class_name")
+	if len(plantName) > 100 || len(className) > 150 || !catalogIdentifier.MatchString(plantName) || !catalogIdentifier.MatchString(className) {
+		catalogError(c, http.StatusBadRequest, "INVALID_INPUT", "Kode tanaman atau kelas tidak valid")
+		return
+	}
 
-	disease, err := h.diseaseService.GetDiseaseByClassName(c.Request.Context(), className)
+	disease, err := h.diseaseService.GetDiseaseByPlantAndClass(c.Request.Context(), plantName, className)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Cannot retrieve disease: " + err.Error()})
+		if errors.Is(err, service.ErrDiseaseNotFound) {
+			catalogError(c, http.StatusNotFound, "DISEASE_NOT_FOUND", "Data penyakit tidak ditemukan")
+		} else {
+			catalogError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Terjadi kesalahan internal")
+		}
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"disease": disease,
+		"disease": catalogDisease(*disease),
 	})
 }

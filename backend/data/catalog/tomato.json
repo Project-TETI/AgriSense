@@ -1,0 +1,79 @@
+{
+  "name": "tomato",
+  "display_name": "Tomat",
+  "description": "Tanaman tomat (Solanum lycopersicum).",
+  "diseases": [
+    {
+      "class_name": "bacterial_spot",
+      "display_name": "Bercak bakteri",
+      "cause": "Bakteri Xanthomonas.",
+      "description": "Penyakit bakteri yang dapat menyerang daun, batang, dan buah tomat.",
+      "symptoms": "Bercak kecil berwarna cokelat pada daun, kadang dikelilingi warna kuning.",
+      "recommendation": "Hindari membasahi daun saat menyiram dan bersihkan alat. Konsultasikan diagnosis dan penanganan dengan penyuluh pertanian."
+    },
+    {
+      "class_name": "early_blight",
+      "display_name": "Hawar daun awal",
+      "cause": "Jamur Alternaria, antara lain Alternaria solani.",
+      "description": "Penyakit yang dapat menyerang daun, batang, dan buah tomat.",
+      "symptoms": "Bercak cokelat pada daun tua, kadang membentuk lingkaran konsentris dan dikelilingi warna kuning.",
+      "recommendation": "Jaga sirkulasi udara dan siram di pangkal tanaman. Konsultasikan diagnosis dan penanganan dengan penyuluh pertanian."
+    },
+    {
+      "class_name": "late_blight",
+      "display_name": "Hawar daun lanjut",
+      "cause": "Oomycete Phytophthora infestans.",
+      "description": "Penyakit yang dapat berkembang cepat pada tomat, terutama dalam kondisi basah.",
+      "symptoms": "Bercak tidak beraturan seperti basah pada daun yang kemudian berubah cokelat.",
+      "recommendation": "Segera konsultasikan dugaan penyakit dengan penyuluh pertanian dan hindari memindahkan bagian tanaman yang sakit ke tanaman lain."
+    },
+    {
+      "class_name": "leaf_mold",
+      "display_name": "Kapang daun",
+      "cause": "Jamur Passalora fulva.",
+      "description": "Penyakit daun tomat yang berkembang pada kondisi lembap.",
+      "symptoms": "Bercak kekuningan di permukaan atas daun dengan lapisan seperti beludru berwarna zaitun di bawahnya.",
+      "recommendation": "Perbaiki sirkulasi udara dan hindari kelembapan berlebih pada daun. Konsultasikan diagnosis dan penanganan dengan penyuluh pertanian."
+    },
+    {
+      "class_name": "mosaic_virus",
+      "display_name": "Virus mosaik tomat",
+      "cause": "Infeksi virus mosaik pada tomat.",
+      "description": "Penyakit virus yang dapat mengubah warna dan bentuk daun serta menghambat pertumbuhan.",
+      "symptoms": "Pola warna hijau muda dan tua yang tidak merata seperti mosaik pada daun.",
+      "recommendation": "Bersihkan tangan dan alat setelah menangani tanaman bergejala. Konsultasikan diagnosis dan penanganan dengan penyuluh pertanian."
+    },
+    {
+      "class_name": "septoria_leaf_spot",
+      "display_name": "Bercak daun Septoria",
+      "cause": "Jamur Septoria lycopersici.",
+      "description": "Penyakit bercak daun yang umumnya muncul pada daun bagian bawah.",
+      "symptoms": "Bercak kecil dengan tepi gelap dan bagian tengah keabu-abuan atau cokelat muda.",
+      "recommendation": "Jaga daun tetap kering saat menyiram dan tingkatkan sirkulasi udara. Konsultasikan diagnosis dan penanganan dengan penyuluh pertanian."
+    },
+    {
+      "class_name": "target_spot",
+      "display_name": "Bercak target",
+      "cause": "Jamur Corynespora cassiicola.",
+      "description": "Penyakit bercak yang dapat menyerang bagian tanaman tomat termasuk daun.",
+      "symptoms": "Bercak cokelat pada daun yang dapat membentuk pola lingkaran menyerupai target.",
+      "recommendation": "Jaga sirkulasi udara dan hindari daun basah berkepanjangan. Konsultasikan diagnosis dan penanganan dengan penyuluh pertanian."
+    },
+    {
+      "class_name": "twospotted_spider_mite",
+      "display_name": "Tungau laba-laba berbintik dua",
+      "cause": "Serangan tungau Tetranychus urticae.",
+      "description": "Gangguan akibat tungau yang mengisap isi sel daun tanaman.",
+      "symptoms": "Bintik-bintik pucat pada daun dan kadang jaring halus di bagian bawah daun.",
+      "recommendation": "Periksa bagian bawah daun dengan kaca pembesar dan jaga tanaman tidak mengalami kekeringan. Konsultasikan penanganan dengan penyuluh pertanian."
+    },
+    {
+      "class_name": "yellow_leaf_curl_virus",
+      "display_name": "Virus kuning keriting daun tomat",
+      "cause": "Tomato yellow leaf curl virus yang ditularkan oleh kutu kebul.",
+      "description": "Penyakit virus pada tomat yang dapat menghambat pertumbuhan tanaman.",
+      "symptoms": "Daun muda mengecil, menguning, dan menggulung; tanaman dapat tumbuh kerdil.",
+      "recommendation": "Periksa keberadaan kutu kebul dan gunakan bibit sehat pada penanaman berikutnya. Konsultasikan diagnosis dan penanganan dengan penyuluh pertanian."
+    }
+  ]
+}

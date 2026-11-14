@@ -62,7 +62,7 @@ func main() {
 
 		apiV1.GET("/plants", plantHandler.GetPlants)
 		apiV1.GET("/diseases", diseaseHandler.GetDiseases)
-		apiV1.GET("/diseases/:class_name", diseaseHandler.GetDiseaseByClassName)
+		apiV1.GET("/plants/:plant_name/diseases/:class_name", diseaseHandler.GetDiseaseByPlantAndClass)
 	}
 
 	port := os.Getenv("PORT")

@@ -21,7 +21,7 @@ func NewPlantRepository(db *gorm.DB) PlantRepository {
 
 func (r *plantRepository) FindAll(ctx context.Context) ([]domain.Plant, error) {
 	var plants []domain.Plant
-	err := r.db.WithContext(ctx).Find(&plants).Error
+	err := r.db.WithContext(ctx).Order("name").Order("id").Find(&plants).Error
 	if err != nil {
 		return nil, err
 	}
