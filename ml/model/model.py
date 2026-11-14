@@ -5,7 +5,7 @@ from torchvision import models
 from torchmetrics.classification import MulticlassAccuracy, MulticlassF1Score
 
 class LeafClassifier(pl.LightningModule):
-    def __init__(self, model_name: str, num_classes: int, learning_rate: float = 1e-3, weight_decay: float = 1e-3, freeze_backbone: bool = True):
+    def __init__(self, model_name: str, num_classes: int, learning_rate: float = 1e-3, weight_decay: float = 1e-3, freeze_backbone: bool = True, pretrained: bool = True):
         super().__init__()
         self.save_hyperparameters()
         self.learning_rate = learning_rate
@@ -13,14 +13,14 @@ class LeafClassifier(pl.LightningModule):
         self.model_name = model_name
 
         if model_name == 'mobilenet_v3_small':
-            base = models.mobilenet_v3_small(weights=models.MobileNet_V3_Small_Weights.DEFAULT)
+            base = models.mobilenet_v3_small(weights=models.MobileNet_V3_Small_Weights.DEFAULT if pretrained else None)
             self.backbone = nn.Sequential(base.features, base.avgpool)
             in_features = base.classifier[3].in_features
             self.classifier = base.classifier
             self.classifier[3] = nn.Linear(in_features, num_classes)
 
         elif model_name == 'efficientnet_b0':
-            base = models.efficientnet_b0(weights=models.EfficientNet_B0_Weights.DEFAULT)
+            base = models.efficientnet_b0(weights=models.EfficientNet_B0_Weights.DEFAULT if pretrained else None)
             self.backbone = nn.Sequential(base.features, base.avgpool)
             in_features = base.classifier[1].in_features
             self.classifier = base.classifier
