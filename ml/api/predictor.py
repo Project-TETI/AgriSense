@@ -20,6 +20,10 @@ IMAGENET_STD = [0.229, 0.224, 0.225]
 CONFIDENCE_THRESHOLD = 0.60
 
 
+class ModelUnavailableError(Exception):
+    pass
+
+
 class MultiModelService:
     def __init__(self):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -40,6 +44,8 @@ class MultiModelService:
         return sorted([
             d.name.lower() for d in self.weights_dir.iterdir()
             if d.is_dir() and not d.name.startswith('.')
+            and (d / "class_names.json").is_file()
+            and (any(d.glob("*.ckpt")) or any(d.glob("*.pt")))
         ])
 
     def load_plant_model(self, plant: str) -> bool:
@@ -57,24 +63,23 @@ class MultiModelService:
             print(f"[WARN] class_names.json not found in {plant_dir}, skipping.")
             return False
 
-        self.class_names[plant_key] = classes
         num_classes = len(classes)
 
         ckpt_files = list(plant_dir.glob("*.ckpt")) + list(plant_dir.glob("*.pt"))
-        if ckpt_files:
-            model_file = str(ckpt_files[0])
-            if model_file.endswith(".ckpt"):
-                model = LeafClassifier.load_from_checkpoint(model_file)
-            else:
-                model = LeafClassifier(model_name="mobilenet_v3_small", num_classes=num_classes)
-                state = torch.load(model_file, map_location=self.device)
-                model.load_state_dict(state)
-            print(f"[INFO] Loaded model for '{plant_key}' from: {model_file}")
+        if not ckpt_files:
+            raise ModelUnavailableError(f"Model weights for '{plant_key}' are unavailable")
+
+        model_file = str(ckpt_files[0])
+        if model_file.endswith(".ckpt"):
+            model = LeafClassifier.load_from_checkpoint(model_file, map_location=self.device, pretrained=False)
         else:
-            print(f"[WARN] No weight file found in {plant_dir}. Using default weights.")
-            model = LeafClassifier(model_name="mobilenet_v3_small", num_classes=num_classes)
+            model = LeafClassifier(model_name="mobilenet_v3_small", num_classes=num_classes, pretrained=False)
+            state = torch.load(model_file, map_location=self.device)
+            model.load_state_dict(state)
+        print(f"[INFO] Loaded model for '{plant_key}' from: {model_file}")
 
         model.to(self.device).eval()
+        self.class_names[plant_key] = classes
         self.models[plant_key] = model
         return True
 

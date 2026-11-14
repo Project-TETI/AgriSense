@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .schemas import HealthResponse, PredictResponse, SupportedPlantsResponse
 from .validator import validate_image_upload
-from .predictor import model_service
+from .predictor import ModelUnavailableError, model_service
 
 
 @asynccontextmanager
@@ -51,6 +51,8 @@ async def predict_leaf_disease(
     image_bytes = await validate_image_upload(file)
     try:
         class_name, confidence, status = model_service.predict(image_bytes, plant=plant)
+    except ModelUnavailableError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

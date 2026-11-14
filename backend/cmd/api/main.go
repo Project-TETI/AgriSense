@@ -8,6 +8,7 @@ import (
 
 	"github.com/Project-TETI/AgriSense/backend/internal/config"
 	"github.com/Project-TETI/AgriSense/backend/internal/handler"
+	"github.com/Project-TETI/AgriSense/backend/internal/inspection"
 	"github.com/Project-TETI/AgriSense/backend/internal/middleware"
 	"github.com/Project-TETI/AgriSense/backend/internal/repository"
 	"github.com/Project-TETI/AgriSense/backend/internal/service"
@@ -41,6 +42,28 @@ func main() {
 	diseaseService := service.NewDiseaseService(diseaseRepo)
 	diseaseHandler := handler.NewDiseaseHandler(diseaseService)
 
+	mlURL := os.Getenv("ML_SERVICE_URL")
+	if mlURL == "" {
+		mlURL = "http://127.0.0.1:8000"
+	}
+	mlClient, err := inspection.NewMLClient(mlURL)
+	if err != nil {
+		log.Fatal("Invalid ML service configuration")
+	}
+	storageDir := os.Getenv("INSPECTION_STORAGE_DIR")
+	if storageDir == "" {
+		storageDir = "data/inspections"
+	}
+	containerURL := os.Getenv("AZURE_BLOB_CONTAINER_SAS_URL")
+	if os.Getenv("GIN_MODE") == "release" && containerURL == "" {
+		log.Fatal("Azure Blob storage is required in release mode")
+	}
+	storage, err := inspection.NewStorage(storageDir, containerURL)
+	if err != nil {
+		log.Fatal("Invalid inspection storage configuration")
+	}
+	inspectionHandler := inspection.NewHandler(db, mlClient, storage, diseaseService)
+
 	userRepo := repository.NewUserRepository(db)
 	refreshTokenRepo := repository.NewRefreshTokenRepository(db)
 	authTransaction := repository.NewAuthTransaction(db)
@@ -63,6 +86,8 @@ func main() {
 		apiV1.GET("/plants", plantHandler.GetPlants)
 		apiV1.GET("/diseases", diseaseHandler.GetDiseases)
 		apiV1.GET("/plants/:plant_name/diseases/:class_name", diseaseHandler.GetDiseaseByPlantAndClass)
+		apiV1.POST("/inspections", middleware.AuthMiddleware(authConfig.JWTSecret), middleware.AuthRateLimit(20, time.Minute), inspectionHandler.Create)
+		apiV1.GET("/inspections/:id/image", middleware.AuthMiddleware(authConfig.JWTSecret), inspectionHandler.Image)
 	}
 
 	port := os.Getenv("PORT")
@@ -74,7 +99,7 @@ func main() {
 	server := &http.Server{
 		Addr: ":" + port, Handler: r,
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second,
-		WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second,
+		WriteTimeout: 60 * time.Second, IdleTimeout: 60 * time.Second,
 	}
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
