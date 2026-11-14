@@ -10,7 +10,7 @@ import (
 
 type DiseaseService interface {
 	GetAllDiseases(ctx context.Context, plantID string) ([]domain.Disease, error)
-	GetDiseaseByClassName(ctx context.Context, className string) (*domain.Disease, error)
+	GetDiseaseByPlantAndClass(ctx context.Context, plantName, className string) (*domain.Disease, error)
 }
 
 type diseaseService struct {
@@ -25,13 +25,15 @@ func (s *diseaseService) GetAllDiseases(ctx context.Context, plantID string) ([]
 	return s.diseaseRepo.FindAll(ctx, plantID)
 }
 
-func (s *diseaseService) GetDiseaseByClassName(ctx context.Context, className string) (*domain.Disease, error) {
-	disease, err := s.diseaseRepo.FindByClassName(ctx, className)
+var ErrDiseaseNotFound = errors.New("disease not found")
+
+func (s *diseaseService) GetDiseaseByPlantAndClass(ctx context.Context, plantName, className string) (*domain.Disease, error) {
+	disease, err := s.diseaseRepo.FindByPlantAndClass(ctx, plantName, className)
 	if err != nil {
 		return nil, err
 	}
 	if disease == nil {
-		return nil, errors.New("Disease not found")
+		return nil, ErrDiseaseNotFound
 	}
 	return disease, nil
 }

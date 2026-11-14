@@ -61,11 +61,12 @@ func (p *Plant) BeforeCreate(tx *gorm.DB) (err error) {
 
 type Disease struct {
 	ID             uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	PlantID        uuid.UUID `gorm:"type:uuid;not null;index" json:"plant_id"`
-	ClassName      string    `gorm:"type:varchar(150);uniqueIndex;not null" json:"class_name"`
+	PlantID        uuid.UUID `gorm:"type:uuid;not null;index;uniqueIndex:idx_diseases_plant_class" json:"plant_id"`
+	ClassName      string    `gorm:"type:varchar(150);not null;uniqueIndex:idx_diseases_plant_class" json:"class_name"`
 	DisplayName    string    `gorm:"type:varchar(150);not null" json:"display_name"`
 	Cause          string    `gorm:"type:text;not null" json:"cause"`
 	Description    string    `gorm:"type:text;not null" json:"description"`
+	Symptoms       *string   `gorm:"type:text" json:"symptoms"`
 	Recommendation string    `gorm:"type:text;not null" json:"recommendation"`
 	Plant          Plant     `gorm:"foreignKey:PlantID;constraint:OnDelete:CASCADE;" json:"plant,omitempty"`
 }
