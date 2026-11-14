@@ -84,6 +84,7 @@ type Inspection struct {
 	PlantID         uuid.UUID  `gorm:"type:uuid;not null;index" json:"plant_id"`
 	DiseaseID       *uuid.UUID `gorm:"type:uuid;index" json:"disease_id,omitempty"`
 	ImageURL        string     `gorm:"type:text;not null" json:"image_url"`
+	PredictedClass  *string    `gorm:"type:varchar(150)" json:"predicted_class,omitempty"`
 	ConfidenceScore *float64   `gorm:"type:float" json:"confidence_score,omitempty"`
 	Status          string     `gorm:"type:varchar(50);not null;index" json:"status"`
 	Latitude        *float64   `gorm:"type:double precision" json:"latitude,omitempty"`
